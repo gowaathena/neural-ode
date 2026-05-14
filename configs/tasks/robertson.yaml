@@ -1,0 +1,4 @@
+task: robertson
+# Strongly stiff (stiffness ratio ~ 1e7-1e11). Optional Task C; requires an
+# implicit solver in practice — pair this task config with configs/solvers/implicit_adams.yaml
+# or a torchode/diffrax BDF solver.

@@ -1,0 +1,3 @@
+task: harmonic
+# Damped harmonic oscillator; stiffness ratio ~ 1.
+# Default params live in src/data/dynamics.py (omega=1.0, gamma=0.1).

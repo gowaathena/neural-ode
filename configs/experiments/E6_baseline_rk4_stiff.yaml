@@ -1,0 +1,6 @@
+# Solver x stiffness interaction. Expect blowup unless step_size << stability limit.
+task: vanderpol
+task_kwargs:
+  mu: 50.0
+solver: rk4
+lambda_J: 0.0

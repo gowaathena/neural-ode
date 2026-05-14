@@ -1,0 +1,5 @@
+task: vanderpol
+# Mildly stiff. mu = 50 is the proposal's default; try mu = 100 for the optional
+# stiffer regime.
+task_kwargs:
+  mu: 50.0

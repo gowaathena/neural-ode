@@ -1,0 +1,7 @@
+solver: implicit_adams
+# Ancillary implicit solver (torchdiffeq's implicit_adams). Used only on the stiff
+# task to test whether implicit integration is a complement or substitute for
+# Jacobian regularization. See docs/theory/03_stiffness_and_implicit.md.
+#
+# If Newton-iteration logging is required, switch to torchode (BDF) or diffrax
+# (Kvaerno5) — torchdiffeq does not expose Newton counts.

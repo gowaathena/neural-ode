@@ -1,0 +1,3 @@
+solver: dopri5
+# Adaptive 5th-order embedded Runge-Kutta (Dormand-Prince). NFE varies; this is
+# the cell where the regularization x stiffness interaction should be sharpest.

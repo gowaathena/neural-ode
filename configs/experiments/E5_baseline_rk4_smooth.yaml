@@ -1,0 +1,4 @@
+# Solver effect on smooth target. NFE is fixed by step_size; report MSE primarily.
+task: harmonic
+solver: rk4
+lambda_J: 0.0

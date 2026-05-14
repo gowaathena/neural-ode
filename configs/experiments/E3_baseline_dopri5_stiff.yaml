@@ -1,0 +1,6 @@
+# Stiffness effect (baseline). Compare to E1.
+task: vanderpol
+task_kwargs:
+  mu: 50.0
+solver: dopri5
+lambda_J: 0.0

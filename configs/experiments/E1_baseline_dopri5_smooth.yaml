@@ -1,0 +1,4 @@
+# Reference cell. Baseline Neural ODE, adaptive solver, smooth target.
+task: harmonic
+solver: dopri5
+lambda_J: 0.0

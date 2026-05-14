@@ -1,0 +1,7 @@
+# Full three-way cell. Does regularization rescue RK4 on stiff dynamics?
+task: vanderpol
+task_kwargs:
+  mu: 50.0
+solver: rk4
+lambda_J: 1.0e-3
+jac_K: 1

@@ -1,0 +1,5 @@
+# Regularization x solver (smooth).
+task: harmonic
+solver: rk4
+lambda_J: 1.0e-3
+jac_K: 1

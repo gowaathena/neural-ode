@@ -1,0 +1,287 @@
+% Appendix - Theoretical Derivations
+% Marked separately so it can be transcribed by hand at the end of the project.
+
+\appendix
+
+\section{Theoretical Derivations}
+\label{app:theory}
+
+This appendix collects the analytical results that motivate the experimental design.
+Where a result is classical, we cite the canonical source and give a compact
+derivation suitable for transcription by hand. Where the result is a novel synthesis
+of standard pieces, we mark it with a $\star$.
+
+Throughout this appendix, $f \colon \mathbb{R}^d \to \mathbb{R}^d$ is the (autonomous)
+vector field of the ODE $\dot x = f(x)$, and $J(x) = \partial f / \partial x$ is its
+Jacobian.
+
+\subsection{Linear stability and the step-size restriction (Mechanism B)}
+\label{app:stability}
+
+\begin{theorem}[Stability step bound, after Hairer--Wanner~\cite{hairer1996solving}]
+\label{thm:stability}
+Let $\Phi_h$ be an explicit Runge--Kutta method with stability region $S \subset
+\mathbb{C}$, and apply it to the linear test equation $\dot y = \lambda y$.
+The numerical scheme is stable iff $h\lambda \in S$. For a nonlinear system
+$\dot x = f(x)$ in the neighbourhood of a point $x^\star$ where $f(x^\star) = 0$,
+local stability of $\Phi_h$ requires
+\begin{equation}
+h \cdot \rho(J(x^\star)) \;\leq\; C_p,
+\label{eq:stability-bound}
+\end{equation}
+where $\rho(\cdot)$ denotes spectral radius and $C_p$ is a method-dependent constant
+(for classical RK4, $C_p \approx 2.78$ on the negative real axis).
+\end{theorem}
+
+\begin{proof}[Sketch]
+The standard linearisation argument: write $x = x^\star + y$, expand
+$f(x^\star + y) = J(x^\star) y + O(\|y\|^2)$, and apply $\Phi_h$ to the linearised
+system. Stability is then a property of the eigenvalues of the amplification matrix
+$R(hJ)$, which equals $\Phi_h$ applied to $\dot y = \lambda y$ for each eigenvalue
+$\lambda$ of $J(x^\star)$. The condition $h\lambda \in S$ is therefore necessary and
+sufficient for local linear stability. See~\cite{hairer1996solving} \S IV.2 for the
+full argument.
+\end{proof}
+
+\textbf{Consequence.} On a \emph{stiff} system, $\rho(J) \gg 1$, so the stable step
+size $h_\text{stab} = C_p / \rho(J)$ can be much smaller than the step size required
+for accuracy alone. This is the mechanism that explicit methods are penalised on
+stiff problems.
+
+\subsection{Frobenius norm bounds the spectral radius}
+\label{app:frobenius-bound}
+
+\begin{lemma}[Frobenius dominance]
+\label{lem:frob-dominates}
+For any matrix $A \in \mathbb{R}^{d \times d}$,
+\begin{equation}
+\rho(A) \;\leq\; \|A\|_2 \;\leq\; \|A\|_F,
+\label{eq:frob-bound}
+\end{equation}
+with equality in the first inequality iff $A$ is normal, and equality in the second
+iff $A$ has at most one nonzero singular value.
+\end{lemma}
+
+\begin{proof}
+Let $\sigma_1 \geq \dots \geq \sigma_d \geq 0$ be the singular values of $A$. Then
+$\|A\|_2 = \sigma_1$ and $\|A\|_F^2 = \sum_i \sigma_i^2$, so
+$\|A\|_2 \leq \|A\|_F$. For any eigenvalue $\lambda$ of $A$ with eigenvector $v$,
+$\|Av\| = |\lambda| \|v\|$, hence $|\lambda| \leq \|A\|_2$. Taking the maximum over
+eigenvalues yields $\rho(A) \leq \|A\|_2$.
+\end{proof}
+
+\textbf{Consequence.} The penalty $\lambda_J \|J\|_F^2$ is a soft, differentiable
+upper bound on $\lambda_J \rho(J)^2$. Suppressing $\|J\|_F$ therefore relaxes the
+stability restriction~\eqref{eq:stability-bound}.
+
+\subsection{Truncation-error step bound (Mechanism A)}
+\label{app:trunc-bound}
+
+\begin{theorem}[Accuracy step bound, after Hairer--N\o{}rsett--Wanner~\cite{hairer1993solving}]
+\label{thm:accuracy}
+For an order-$p$ Runge--Kutta method with adaptive step size satisfying a
+relative-error tolerance $\tau$, the expected number of steps to integrate over
+$[0, T]$ obeys
+\begin{equation}
+N \;\leq\; C \cdot T \cdot M^{p/(p+1)} \cdot \tau^{-1/(p+1)},
+\label{eq:accuracy-bound}
+\end{equation}
+where $M = \sup_{t \in [0,T]} \|x^{(p+1)}(t)\|$ and $C$ depends only on the method.
+\end{theorem}
+
+\begin{proof}[Sketch]
+The local truncation error of an order-$p$ method is
+$\tau_n = \frac{h^{p+1}}{(p+1)!} x^{(p+1)}(\xi_n) + O(h^{p+2})$ for some
+$\xi_n \in [t_n, t_{n+1}]$. The optimal adaptive step satisfies
+$h^{p+1} M \approx \tau$, so $h \approx (\tau / M)^{1/(p+1)}$. The number of steps is
+$N \approx T / h$. See~\cite{hairer1993solving} \S II.4.
+\end{proof}
+
+\textbf{Consequence.} Since $x^{(p+1)}$ is a polynomial in $J$ and its derivatives,
+suppressing $\|J\|$ reduces $M$ and therefore $N$. This is the accuracy-side
+benefit of Jacobian regularization, in contrast to the stability-side benefit of
+\S\ref{app:stability}.
+
+\subsection{Hutchinson estimator for the Frobenius norm squared}
+\label{app:hutchinson}
+
+\begin{theorem}[Hutchinson unbiasedness, after Hutchinson~\cite{hutchinson1990stochastic}]
+\label{thm:hutchinson}
+Let $A \in \mathbb{R}^{d \times d}$ and let $\epsilon \in \mathbb{R}^d$ be a random
+vector with $\mathbb{E}[\epsilon] = 0$ and $\mathbb{E}[\epsilon \epsilon^\top] = I_d$
+(e.g., $\epsilon$ has i.i.d.\ Rademacher entries, or i.i.d.\ $\mathcal{N}(0,1)$).
+Then
+\begin{equation}
+\mathbb{E}_\epsilon\!\left[\|A^\top \epsilon\|^2\right] \;=\; \|A\|_F^2.
+\label{eq:hutchinson}
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+\begin{align}
+\mathbb{E}_\epsilon\!\left[\|A^\top \epsilon\|^2\right]
+&= \mathbb{E}\left[\epsilon^\top A A^\top \epsilon\right]
+ = \mathbb{E}\!\left[\mathrm{tr}\!\left(A A^\top \epsilon \epsilon^\top\right)\right] \\
+&= \mathrm{tr}\!\left(A A^\top \, \mathbb{E}[\epsilon \epsilon^\top]\right)
+ = \mathrm{tr}(A A^\top)
+ = \|A\|_F^2.
+\end{align}
+\end{proof}
+
+\textbf{Variance bound.} For Rademacher $\epsilon$,
+$\mathrm{Var}[\|A^\top \epsilon\|^2] = 2 \sum_{i \neq j} (AA^\top)_{ij}^2$, which is
+zero iff $AA^\top$ is diagonal. A $K$-sample average reduces variance by $1/K$.
+
+\textbf{Implementation.} In automatic differentiation, $A^\top \epsilon$ is the
+vector--Jacobian product of $f$ at the evaluation point with co-tangent vector
+$\epsilon$, which costs a single backward pass through $f$ regardless of $d$.
+
+\subsection{A-stability of implicit Euler}
+\label{app:a-stability}
+
+\begin{theorem}[A-stability of implicit Euler, after Dahlquist~\cite{dahlquist1963special}]
+\label{thm:a-stability}
+The implicit Euler method $x_{n+1} = x_n + h f(x_{n+1})$ applied to the linear test
+equation $\dot y = \lambda y$ with $\mathrm{Re}(\lambda) < 0$ is stable for every
+$h > 0$.
+\end{theorem}
+
+\begin{proof}
+On $\dot y = \lambda y$, the scheme reduces to $y_{n+1} = y_n + h \lambda y_{n+1}$,
+so $y_{n+1} = (1 - h\lambda)^{-1} y_n$. For $\mathrm{Re}(\lambda) < 0$,
+$|1 - h\lambda|^2 = (1 - h\mathrm{Re}(\lambda))^2 + (h\mathrm{Im}(\lambda))^2 > 1$
+for all $h > 0$, hence $|1 - h\lambda|^{-1} < 1$ and $|y_{n+1}| < |y_n|$. The scheme
+is therefore stable for all $h > 0$. Moreover $|1 - h\lambda|^{-1} \to 0$ as
+$h \to \infty$, so the method is also L-stable.
+\end{proof}
+
+\textbf{Consequence.} On a stiff system, the implicit Euler step size is governed
+only by accuracy (Mechanism A), not by stability (Mechanism B). Each step, however,
+requires solving a nonlinear equation; for a Newton-based implicit solver this is
+$O(\bar K)$ Jacobian evaluations and linear solves per step.
+
+\subsection{The interaction prediction $\star$}
+\label{app:interaction}
+
+We now combine the preceding results to derive the prediction that motivated the
+original H1 hypothesis. Define the NFE reduction at matched validation MSE as
+$\Delta N(s) := N_\text{base}(s) - N_\text{reg}(s)$ where $s$ indexes target-system
+stiffness. Suppose (i) the regularizer reduces $\|J_{f_\theta}\|_F$ by a
+multiplicative factor $\beta \in (0,1)$ relative to baseline, (ii) the smooth task is
+accuracy-limited, and (iii) the stiff task is stability-limited.
+
+By Theorem~\ref{thm:accuracy}, on the smooth task
+\begin{equation*}
+\frac{N_\text{reg}}{N_\text{base}}
+  = \left(\frac{M_\text{reg}}{M_\text{base}}\right)^{p/(p+1)}
+  \approx \beta^{p/(p+1)},
+\end{equation*}
+so $\Delta N_\text{smooth} \propto (1 - \beta^{p/(p+1)})$.
+
+By Theorem~\ref{thm:stability}, on the stiff task
+$N \propto T \cdot \rho(J) / C_p$ and Lemma~\ref{lem:frob-dominates} gives
+$\rho(J) \leq \|J\|_F$, so
+\begin{equation*}
+\frac{N_\text{reg}}{N_\text{base}} \approx \beta,
+\end{equation*}
+yielding $\Delta N_\text{stiff} \propto (1 - \beta)$.
+
+\begin{proposition}[Predicted interaction]
+\label{prop:interaction}
+Under assumptions (i)--(iii),
+\begin{equation}
+\frac{\Delta N_\text{stiff}}{\Delta N_\text{smooth}}
+  \;\approx\; \frac{1 - \beta}{1 - \beta^{p/(p+1)}}
+  \;>\; 1 \quad \text{for } p \geq 1.
+\label{eq:interaction-prediction}
+\end{equation}
+\end{proposition}
+
+\textbf{Empirical caveat.} Assumption (i) requires the regularizer to engage at the
+training operating point; \S\ref{sec:engagement} of the main text shows this
+assumption \emph{fails} on the stiff target used here, because the model never
+develops the high-Lipschitz vector field that the penalty would suppress.
+\textbf{Proposition~\ref{prop:interaction} is therefore predictively vacuous
+on this task family:} its antecedent has empirical probability zero on
+Van der Pol $\mu \geq 25$, so the proposition does not constrain our null
+result, but neither is it falsified. It survives as a hypothesis for a
+hypothetical regime where penalty and stiffness co-engage.
+
+\subsection{Cost decomposition for implicit Runge--Kutta}
+\label{app:implicit-cost}
+
+\begin{proposition}[Implicit cost decomposition]
+\label{prop:implicit-cost}
+For an $s$-stage implicit Runge--Kutta method run for $N$ outer steps, with average
+Newton iteration count $\bar K$ per step, the cumulative work is
+\begin{equation}
+W \;=\; N \cdot \bar K \cdot \bigl[s \cdot W_f \;+\; W_J \;+\; W_\text{lin}\bigr],
+\label{eq:implicit-cost}
+\end{equation}
+where $W_f$ is the cost of one $f$ evaluation, $W_J$ the cost of one Jacobian
+evaluation, and $W_\text{lin}$ the cost of a single linear solve of dimension
+$d \cdot s$.
+\end{proposition}
+
+Equation~\eqref{eq:implicit-cost} is the unit in which implicit and explicit costs
+should be compared. In particular, the NFE count alone (which is $N \cdot \bar K
+\cdot s$ for implicit methods) is not sufficient to characterise the wall-clock
+cost; the Jacobian and linear-solve terms can dominate on small $d$ where dense
+linear algebra is cheap but $W_J$ is non-trivial.
+
+\section{Reproducibility Checklist}
+\label{app:reproducibility}
+
+This checklist records settings not already stated in \S\ref{sec:methods}; we
+do not duplicate model, optimiser, training, or solver descriptions that
+appear in the main text.
+
+\begin{enumerate}[leftmargin=2em]
+\item \textbf{Software.} Python 3.10.5, PyTorch 2.11.0, torchdiffeq
+0.2.5~\citep{chen2018torchdiffeq}, NumPy 2.2.6, SciPy 1.15.3,
+matplotlib 3.10.9. Hardware: Apple Silicon laptop, CPU-only training.
+Total wall time for the 115-cell sweep: $\approx 8$ hours.
+\item \textbf{Wall-clock measurement protocol.} Each cell's reported
+wall-clock per forward pass is a single timed call to
+\texttt{model(x0\_val, t)} under \texttt{torch.no\_grad()}, with no warm-up
+pass. On CPU this is noisy at the millisecond level; we recommend
+reproducing with at least three timed passes per cell if precise wall-clock
+numbers matter to the downstream conclusion.
+\item \textbf{IC generator ordering.} For each seed, a single
+\texttt{torch.Generator(seed)} is used to draw the $256$ training $x_0$
+samples and then the $64$ validation samples (disjoint, consecutive draws
+from the same generator). The global PyTorch RNG is independently seeded
+with the same integer for model initialisation and Hutchinson noise.
+\item \textbf{Penalty sampling distribution.} 32 $(t, x)$ pairs per training
+step are drawn uniformly from the \emph{flat} $(T \cdot B)$ index of
+ground-truth training trajectories, so time and initial-condition indices
+are sampled jointly with equal weight. This implicitly over-samples
+slow-manifold portions of the Van der Pol trajectory where the
+uniform-in-$t$ grid is dense.
+\item \textbf{Tolerance sweep coupling.} $r_\text{tol}$ and $a_\text{tol}$
+are both varied in the tolerance sweep:
+$(r_\text{tol}, a_\text{tol}) \in \{(10^{-3}, 10^{-5}), (10^{-5}, 10^{-7}),
+(10^{-7}, 10^{-9})\}$. The fitted exponent $\alpha$ in \S\ref{sec:h0}
+therefore reflects sensitivity to both tolerances jointly. The tolerance
+override is applied before training, so these cells are train-and-evaluate
+tolerance settings rather than an eval-only sweep on one fixed trained model.
+\item \textbf{Solver-registry mutation.} Tolerance overrides are implemented
+by in-process mutation of \texttt{SOLVER\_REGISTRY} in
+\texttt{scripts/train\_single.py}. Each cell runs in a fresh subprocess
+(via \texttt{run\_matrix.py}) so the mutation does not leak across cells.
+\item \textbf{Statistical tests.} Paired Wilcoxon signed-rank with the
+\emph{wilcox} zero-handling convention; rank-biserial correlation as effect
+size. Bonferroni correction is applied at family-wise $\alpha = 0.05$
+across the H3 set ($m = 3$). With each H3 comparison hitting one-sided
+$p = 0.031$ uncorrected, none survives Bonferroni at $\alpha/m = 0.017$
+when treated as a family. We therefore report the consistent direction
+across $\mu$ as the substantive finding, not the per-comparison
+significance after correction.
+\item \textbf{Result provenance.} Result filenames encode task, solver,
+$\lambda_J$, and seed; full metadata such as $\mu$, $K$, tolerance overrides,
+and the output directory for follow-up sweeps must be read from the JSON
+\texttt{config} block and directory structure. A cleaner archival release
+would include a manifest or filenames containing every experimental factor.
+\item \textbf{Total cells.} 115 trained runs across all sweeps,
+summarised in Table~\ref{tab:cells} of the main text.
+\end{enumerate}

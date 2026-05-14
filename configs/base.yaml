@@ -1,0 +1,20 @@
+# Default training configuration. Experiment YAMLs override only the fields they
+# need (task, solver, lambda_J).
+task: harmonic
+n_train: 256
+n_val: 64
+
+hidden_dim: 64
+num_hidden: 2
+
+solver: dopri5
+
+lambda_J: 0.0
+jac_K: 1
+jac_exact: false
+
+lr: 1.0e-3
+epochs: 100
+batch_size: 32
+
+log_every: 1

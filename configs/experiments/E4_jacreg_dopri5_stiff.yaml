@@ -1,0 +1,7 @@
+# Regularization x stiffness interaction. THE key cell for the main hypothesis H1.
+task: vanderpol
+task_kwargs:
+  mu: 50.0
+solver: dopri5
+lambda_J: 1.0e-3
+jac_K: 1

@@ -1,0 +1,9 @@
+# ANCILLARY: Implicit solver, no regularization, stiff target.
+# Tests whether switching to an implicit solver is a substitute for Jacobian
+# regularization on stiff problems. See docs/theory/03_stiffness_and_implicit.md
+# for the comparison framing and proposal section 3.6.4.
+task: vanderpol
+task_kwargs:
+  mu: 50.0
+solver: implicit_adams
+lambda_J: 0.0

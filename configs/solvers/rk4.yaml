@@ -1,0 +1,4 @@
+solver: rk4
+# Fixed-step classical RK4. NFE is constant by construction; the cost metric
+# shifts to prediction error and step-size adequacy (does step_size respect the
+# stability limit? if not, MSE blows up on the stiff task).

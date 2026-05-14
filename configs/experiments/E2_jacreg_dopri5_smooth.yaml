@@ -1,0 +1,5 @@
+# Regularization effect on smooth target. Compare to E1.
+task: harmonic
+solver: dopri5
+lambda_J: 1.0e-3   # swept over {1e-4, 1e-3, 1e-2, 1e-1}; select best by validation MSE
+jac_K: 1

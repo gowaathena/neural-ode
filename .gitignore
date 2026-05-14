@@ -1,0 +1,48 @@
+# Local environments
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# Python caches and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# OS/editor files
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# LaTeX build artifacts.
+# Keep .tex, .bib, .pdf, and figure PDFs so the paper/proposal remain bundled.
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+
+# Matplotlib/font caches
+.matplotlib/
+fontlist-v*.json
+
+# Large generated model artifacts, if added later.
+*.ckpt
+*.pt
+*.pth
+
+# Keep result JSONs for paper reproducibility, but ignore transient logs.
+results/*.log
