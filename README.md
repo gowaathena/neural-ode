@@ -14,7 +14,7 @@ oscillator and Van der Pol trajectories. It compares:
 
 - Jacobian regularization weights `lambda_J in {0, 1e-3, 1e-2, 1e-1}` where applicable.
 - Solvers `dopri5`, `rk4`, and `implicit_adams` through `torchdiffeq`.
-- Van der Pol stiffness settings `mu in {10, 25, 50, 100}`.
+- Van der Pol stiffness settings `mu in {5, 10, 25, 50, 100}`.
 - Train/eval solver tolerances `rtol in {1e-3, 1e-5, 1e-7}` for the tolerance sweep.
 
 The main finding is an engagement gap: the Jacobian penalty visibly reduces the
