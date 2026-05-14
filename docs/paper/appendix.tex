@@ -11,9 +11,10 @@ Where a result is classical, we cite the canonical source and give a compact
 derivation suitable for transcription by hand. Where the result is a novel synthesis
 of standard pieces, we mark it with a $\star$.
 
-Throughout this appendix, $f \colon \mathbb{R}^d \to \mathbb{R}^d$ is the (autonomous)
-vector field of the ODE $\dot x = f(x)$, and $J(x) = \partial f / \partial x$ is its
-Jacobian.
+Throughout this appendix, $f \colon \mathbb{R}^d \to \mathbb{R}^d$ denotes an
+autonomous vector field for the classical numerical-analysis statements, and
+$J(x) = \partial f / \partial x$ is its Jacobian. For the Neural ODE experiments
+we write $f_\theta(x,t)$ and $\fjac(x,t) = \partial f_\theta(x,t)/\partial x$.
 
 \subsection{Linear stability and the step-size restriction (Mechanism B)}
 \label{app:stability}
@@ -23,7 +24,7 @@ Jacobian.
 Let $\Phi_h$ be an explicit Runge--Kutta method with stability region $S \subset
 \mathbb{C}$, and apply it to the linear test equation $\dot y = \lambda y$.
 The numerical scheme is stable iff $h\lambda \in S$. For a nonlinear system
-$\dot x = f(x)$ in the neighbourhood of a point $x^\star$ where $f(x^\star) = 0$,
+$\dot x = f(x)$ in the neighborhood of a point $x^\star$ where $f(x^\star) = 0$,
 local stability of $\Phi_h$ requires
 \begin{equation}
 h \cdot \rho(J(x^\star)) \;\leq\; C_p,
@@ -48,6 +49,20 @@ size $h_\text{stab} = C_p / \rho(J)$ can be much smaller than the step size requ
 for accuracy alone. This is the mechanism that explicit methods are penalised on
 stiff problems.
 
+\textbf{Trajectory-local version.} The equilibrium calculation is the cleanest
+way to state the stability mechanism, but the experiments in this paper do not
+measure Jacobians only at equilibria. Along a trajectory $x(t)$, the local
+variational equation is
+\begin{equation}
+\dot{\delta x}(t) = J(x(t),t)\,\delta x(t).
+\label{eq:trajectory-linearization}
+\end{equation}
+Thus the reported $\rho(J(x(t),t))$, $\|J(x(t),t)\|_F$, and accepted step sizes
+should be read as trajectory-local diagnostics of the learned dynamics, not as
+global stiffness certificates. They indicate whether the numerical solve is
+encountering locally restrictive Jacobians on the validation trajectories in
+this setup.
+
 \subsection{Frobenius norm bounds the spectral radius}
 \label{app:frobenius-bound}
 
@@ -71,17 +86,20 @@ eigenvalues yields $\rho(A) \leq \|A\|_2$.
 \end{proof}
 
 \textbf{Consequence.} The penalty $\lambda_J \|J\|_F^2$ is a soft, differentiable
-upper bound on $\lambda_J \rho(J)^2$. Suppressing $\|J\|_F$ therefore relaxes the
-stability restriction~\eqref{eq:stability-bound}.
+upper bound on $\lambda_J \rho(J)^2$. Suppressing $\|J\|_F$ therefore makes a
+smaller spectral radius plausible, but Lemma~\ref{lem:frob-dominates} does not
+imply proportional shrinkage of $\rho(J)$. The stability benefit requires
+spectral engagement: the eigenvalues that constrain the step size must actually
+move, not merely the Frobenius upper bound.
 
 \subsection{Truncation-error step bound (Mechanism A)}
 \label{app:trunc-bound}
 
 \begin{theorem}[Accuracy step bound, after Hairer--N\o{}rsett--Wanner~\cite{hairer1993solving}]
 \label{thm:accuracy}
-For an order-$p$ Runge--Kutta method with adaptive step size satisfying a
-relative-error tolerance $\tau$, the expected number of steps to integrate over
-$[0, T]$ obeys
+For an order-$p$ Runge--Kutta method in an idealised scalar-tolerance regime,
+with adaptive step size satisfying an error tolerance $\tau$, the expected
+number of steps to integrate over $[0, T]$ obeys
 \begin{equation}
 N \;\leq\; C \cdot T \cdot M^{p/(p+1)} \cdot \tau^{-1/(p+1)},
 \label{eq:accuracy-bound}
@@ -97,10 +115,36 @@ $h^{p+1} M \approx \tau$, so $h \approx (\tau / M)^{1/(p+1)}$. The number of ste
 $N \approx T / h$. See~\cite{hairer1993solving} \S II.4.
 \end{proof}
 
-\textbf{Consequence.} Since $x^{(p+1)}$ is a polynomial in $J$ and its derivatives,
-suppressing $\|J\|$ reduces $M$ and therefore $N$. This is the accuracy-side
-benefit of Jacobian regularization, in contrast to the stability-side benefit of
-\S\ref{app:stability}.
+\textbf{Connection to Jacobians.} For an autonomous ODE, the first few time
+derivatives illustrate why Jacobian regularization can affect the local-error
+constant:
+\begin{align}
+x''(t)
+  &= \frac{d}{dt} f(x(t))
+   = J(x(t)) f(x(t)), \\
+x'''(t)
+  &= \frac{d}{dt}\bigl(J(x(t)) f(x(t))\bigr)
+   = J(x(t))^2 f(x(t)) + \bigl(DJ(x(t))[f(x(t))]\bigr) f(x(t)).
+\end{align}
+The second term in $x'''$ contains Hessian information for $f$. Higher
+derivatives similarly involve products of Jacobians and higher derivatives of
+the vector field. Suppressing Jacobian norms can therefore reduce the
+local-error scale $M$, but $\|J\|_F$ alone does not determine $M$.
+
+\textbf{Practical tolerance caveat.} Practical embedded adaptive solvers do not
+usually enforce a pure scalar tolerance. They control a weighted error norm
+whose components are scaled roughly as
+\begin{equation}
+\left|
+\frac{e}{a_\text{tol} + r_\text{tol}\,|x|}
+\right|.
+\label{eq:weighted-error-norm}
+\end{equation}
+Because our tolerance sweep co-scales $a_\text{tol}$ and $r_\text{tol}$ and
+re-trains a separate model in each tolerance cell, the observed exponent in
+\S\ref{sec:h0} should be interpreted as consistency with expected solver
+behavior, not as a clean asymptotic estimate of $r_\text{tol}^{-1/(p+1)}$ for
+one fixed learned vector field.
 
 \subsection{Hutchinson estimator for the Frobenius norm squared}
 \label{app:hutchinson}
@@ -136,6 +180,127 @@ zero iff $AA^\top$ is diagonal. A $K$-sample average reduces variance by $1/K$.
 vector--Jacobian product of $f$ at the evaluation point with co-tangent vector
 $\epsilon$, which costs a single backward pass through $f$ regardless of $d$.
 
+\subsection{Van der Pol Jacobian calibration}
+\label{app:vdp-jac-calibration}
+
+The Van der Pol target used in the engagement analysis is
+\begin{equation}
+\dot{x}_1 = x_2,
+\qquad
+\dot{x}_2 = \mu(1-x_1^2)x_2 - x_1.
+\end{equation}
+Writing $f_\mathrm{vdp}(x) = (f_1(x), f_2(x))^\top$, the partial derivatives are
+\begin{align}
+\frac{\partial f_1}{\partial x_1} &= 0,
+&
+\frac{\partial f_1}{\partial x_2} &= 1, \\
+\frac{\partial f_2}{\partial x_1} &= -2\mu x_1 x_2 - 1,
+&
+\frac{\partial f_2}{\partial x_2} &= \mu(1-x_1^2).
+\end{align}
+Thus
+\begin{equation}
+J_{\mathrm{vdp}}(x)
+=
+\begin{pmatrix}
+0 & 1 \\
+-2\mu x_1x_2 - 1 & \mu(1-x_1^2)
+\end{pmatrix}.
+\label{eq:vdp-jacobian}
+\end{equation}
+The squared Frobenius norm is the sum of squared entries:
+\begin{equation}
+\|J_{\mathrm{vdp}}(x)\|_F^2
+=
+1 + (-2\mu x_1x_2 - 1)^2 + \mu^2(1-x_1^2)^2.
+\label{eq:vdp-frob-squared}
+\end{equation}
+Table~\ref{tab:true-jac-calibration} in the main text evaluates
+\eqref{eq:vdp-frob-squared} analytically on the same validation-time subsample
+used for learned-Jacobian diagnostics. This makes the calibration a
+true-target comparison on the diagnostic support rather than a separate global
+property of the Van der Pol vector field.
+
+\subsection{Ground-truth versus learned-trajectory penalty support}
+\label{app:penalty-mismatch}
+
+The implemented penalty samples states from the ground-truth trajectory
+distribution. Abstracting away the Hutchinson estimator, it is
+\begin{equation}
+R_{\mathrm{gt}}(\theta)
+=
+\mathbb{E}_{(x,t)\sim \mu_{\mathrm{gt}}}
+\left[\|\fjac(x,t)\|_F^2\right].
+\label{eq:r-gt}
+\end{equation}
+An augmented-state implementation instead integrates the penalty along the
+model's own trajectory:
+\begin{equation}
+R_{\mathrm{model}}(\theta)
+=
+\mathbb{E}_{x_0}
+\int_0^T
+\left\|\fjac\!\left(\hat{x}_\theta(t;x_0),t\right)\right\|_F^2\,dt.
+\label{eq:r-model}
+\end{equation}
+The two regularizers are close only when
+\begin{equation}
+\hat{x}_\theta(t;x_0) \approx x_{\mathrm{gt}}(t;x_0)
+\label{eq:trajectory-fit-condition}
+\end{equation}
+on the time interval and initial-condition distribution of interest, and when
+the Jacobian norm does not vary too sharply between the two state supports.
+In the poor-fit $\mu=50$ regime, the regularizer can therefore be weak for two
+distinct reasons: the learned vector field may have already collapsed to a
+low-Jacobian field, and the ground-truth penalty may be evaluated on states
+that the learned trajectory does not actually visit. The present experiment
+does not separate these mechanisms; it conflates low-Lipschitz collapse with
+penalty-support mismatch.
+
+\subsection{Penalty-engagement diagnostics}
+\label{app:engagement-criterion}
+
+Write the regularized objective as
+\begin{equation}
+L(\theta)=L_{\mathrm{task}}(\theta)+\lambda_J R(\theta).
+\label{eq:regularized-objective}
+\end{equation}
+A direct engagement diagnostic is the gradient-ratio
+\begin{equation}
+\eta_J(\theta)
+=
+\frac{\lambda_J \left\|\nabla_\theta R(\theta)\right\|}
+{\left\|\nabla_\theta L_{\mathrm{task}}(\theta)\right\|}.
+\label{eq:gradient-ratio}
+\end{equation}
+The regularizer can only shape training when $\eta_J(\theta)$ is non-negligible.
+Its direction also matters. A useful companion diagnostic is the gradient
+alignment
+\begin{equation}
+\cos(\nabla L_{\mathrm{task}},\nabla R)
+=
+\frac{
+\left\langle \nabla_\theta L_{\mathrm{task}}(\theta),
+\nabla_\theta R(\theta)\right\rangle
+}{
+\left\|\nabla_\theta L_{\mathrm{task}}(\theta)\right\|
+\left\|\nabla_\theta R(\theta)\right\|
+}.
+\label{eq:gradient-cosine}
+\end{equation}
+If this cosine is near zero, the regularizer may be mostly orthogonal to the
+task update; if it is strongly positive in the convention of gradient descent
+on $L_{\mathrm{task}}+\lambda_J R$, the two objectives pull in similar
+descent directions; if it is strongly negative, reducing the task loss and
+reducing the penalty are locally in conflict.
+
+The back-of-envelope calculation in \S\ref{sec:engagement} compares loss
+scales, not gradient norms. It is a useful sanity check for why the
+$\mu=50$ penalty may be hard to see, but it is not direct evidence about
+\eqref{eq:gradient-ratio} or \eqref{eq:gradient-cosine}, especially under Adam's
+per-parameter rescaling. Logging $\eta_J$ and the cosine during training would
+be the appropriate diagnostic for the proposed mechanism.
+
 \subsection{A-stability of implicit Euler}
 \label{app:a-stability}
 
@@ -160,52 +325,76 @@ only by accuracy (Mechanism A), not by stability (Mechanism B). Each step, howev
 requires solving a nonlinear equation; for a Newton-based implicit solver this is
 $O(\bar K)$ Jacobian evaluations and linear solves per step.
 
-\subsection{The interaction prediction $\star$}
+\subsection{The interaction prediction \texorpdfstring{$\star$}{star}}
 \label{app:interaction}
 
 We now combine the preceding results to derive the prediction that motivated the
-original H1 hypothesis. Define the NFE reduction at matched validation MSE as
-$\Delta N(s) := N_\text{base}(s) - N_\text{reg}(s)$ where $s$ indexes target-system
-stiffness. Suppose (i) the regularizer reduces $\|J_{f_\theta}\|_F$ by a
-multiplicative factor $\beta \in (0,1)$ relative to baseline, (ii) the smooth task is
-accuracy-limited, and (iii) the stiff task is stability-limited.
+original H1 hypothesis. Let $s$ index target-system stiffness and define the
+fractional NFE reduction at matched validation MSE as
+$\delta(s) := 1 - N_\text{reg}(s)/N_\text{base}(s)$. The original proposal used a
+single shrinkage factor $\beta$ as a shorthand. That is too strong: Frobenius
+shrinkage, spectral-radius shrinkage, and local-error shrinkage need not
+coincide. We therefore distinguish
+\begin{equation}
+\beta_F =
+\frac{\|J_{\mathrm{reg}}\|_F}{\|J_{\mathrm{base}}\|_F},
+\qquad
+\beta_\rho =
+\frac{\rho(J_{\mathrm{reg}})}{\rho(J_{\mathrm{base}})},
+\qquad
+\beta_M =
+\frac{M_{\mathrm{reg}}}{M_{\mathrm{base}}},
+\label{eq:beta-definitions}
+\end{equation}
+where $M$ is the local-error derivative scale from
+Theorem~\ref{thm:accuracy}. In the experiments these quantities should be read
+as trajectory-local summaries on the validation diagnostic grid, not as global
+properties of the vector field.
 
 By Theorem~\ref{thm:accuracy}, on the smooth task
 \begin{equation*}
 \frac{N_\text{reg}}{N_\text{base}}
   = \left(\frac{M_\text{reg}}{M_\text{base}}\right)^{p/(p+1)}
-  \approx \beta^{p/(p+1)},
+  = \beta_M^{p/(p+1)},
 \end{equation*}
-so $\Delta N_\text{smooth} \propto (1 - \beta^{p/(p+1)})$.
+so the fractional NFE reduction is approximately
+$1 - \beta_M^{p/(p+1)}$ when the solve is accuracy-limited.
 
 By Theorem~\ref{thm:stability}, on the stiff task
-$N \propto T \cdot \rho(J) / C_p$ and Lemma~\ref{lem:frob-dominates} gives
-$\rho(J) \leq \|J\|_F$, so
+$N \propto T \cdot \rho(J) / C_p$, so
 \begin{equation*}
-\frac{N_\text{reg}}{N_\text{base}} \approx \beta,
+\frac{N_\text{reg}}{N_\text{base}} \approx \beta_\rho,
 \end{equation*}
-yielding $\Delta N_\text{stiff} \propto (1 - \beta)$.
+and the fractional NFE reduction is approximately $1-\beta_\rho$ when the
+solve is stability-limited. Lemma~\ref{lem:frob-dominates} only gives
+$\rho(J) \leq \|J\|_F$: reducing $\|J\|_F$ makes a reduction in $\rho(J)$
+plausible, but it does not guarantee $\beta_\rho \approx \beta_F$.
 
-\begin{proposition}[Predicted interaction]
+\begin{proposition}[Conditional interaction prediction]
 \label{prop:interaction}
-Under assumptions (i)--(iii),
+Suppose the smooth task is accuracy-limited, the stiff task is
+stability-limited, and regularization engages both the accuracy scale
+($\beta_M<1$) and the stability scale ($\beta_\rho<1$) at matched validation
+MSE. Then the predicted ratio of fractional NFE reductions is
 \begin{equation}
-\frac{\Delta N_\text{stiff}}{\Delta N_\text{smooth}}
-  \;\approx\; \frac{1 - \beta}{1 - \beta^{p/(p+1)}}
-  \;>\; 1 \quad \text{for } p \geq 1.
+\frac{\delta_\text{stiff}}{\delta_\text{smooth}}
+  \;\approx\; \frac{1 - \beta_\rho}{1 - \beta_M^{p/(p+1)}}.
 \label{eq:interaction-prediction}
 \end{equation}
+A positive interaction requires this ratio to exceed one; equivalently, the
+spectral-radius engagement in the stability-limited regime must be strong
+enough relative to the accuracy-scale engagement in the accuracy-limited
+regime. It is not implied by $\beta_F<1$ alone.
 \end{proposition}
 
-\textbf{Empirical caveat.} Assumption (i) requires the regularizer to engage at the
-training operating point; \S\ref{sec:engagement} of the main text shows this
-assumption \emph{fails} on the stiff target used here, because the model never
-develops the high-Lipschitz vector field that the penalty would suppress.
-\textbf{Proposition~\ref{prop:interaction} is therefore predictively vacuous
-on this task family:} its antecedent has empirical probability zero on
-Van der Pol $\mu \geq 25$, so the proposition does not constrain our null
-result, but neither is it falsified. It survives as a hypothesis for a
-hypothetical regime where penalty and stiffness co-engage.
+\textbf{Empirical caveat.} The antecedent of
+Proposition~\ref{prop:interaction} is exactly what fails in this experiment.
+At $\mu=50$, the Frobenius penalty is operationally inert because the learned
+field is already low-Jacobian; at $\mu=10$, where Frobenius engagement is
+visible, the learned dynamics do not show a stability-limited step-size
+restriction. The proposition therefore does not prove the empirical trade-off.
+It states a conditional mechanism for a hypothetical regime in which fit,
+penalty engagement, and learned stiffness co-occur.
 
 \subsection{Cost decomposition for implicit Runge--Kutta}
 \label{app:implicit-cost}
@@ -223,24 +412,34 @@ evaluation, and $W_\text{lin}$ the cost of a single linear solve of dimension
 $d \cdot s$.
 \end{proposition}
 
-Equation~\eqref{eq:implicit-cost} is the unit in which implicit and explicit costs
-should be compared. In particular, the NFE count alone (which is $N \cdot \bar K
-\cdot s$ for implicit methods) is not sufficient to characterise the wall-clock
-cost; the Jacobian and linear-solve terms can dominate on small $d$ where dense
-linear algebra is cheap but $W_J$ is non-trivial.
+Equation~\eqref{eq:implicit-cost} is the cost model for serious Newton-based
+stiff solvers such as implicit Runge--Kutta, BDF, or Radau-type methods. In
+that setting, the NFE count alone (which is $N \cdot \bar K \cdot s$ for
+implicit Runge--Kutta) is not sufficient to characterize wall-clock cost; the
+Jacobian and linear-solve terms can dominate on small $d$ where dense linear
+algebra is cheap but $W_J$ is non-trivial.
+
+This is not the exact cost model for the empirical H3 baseline:
+\texttt{torchdiffeq.implicit\_adams} uses fixed-point iteration rather than
+Newton solves. Its leading per-step cost is closer to
+$N \cdot \bar K_\mathrm{fp} \cdot W_f$, with no explicit Jacobian or linear-solve
+term exposed to the user. It also does not represent a full comparison against
+modern $A$- or $L$-stable Newton-based stiff solvers. Proposition~\ref{prop:implicit-cost}
+therefore motivates why implicit methods can have hidden costs, but it does
+not describe the exact implementation used in the H3 comparison.
 
 \section{Reproducibility Checklist}
 \label{app:reproducibility}
 
 This checklist records settings not already stated in \S\ref{sec:methods}; we
-do not duplicate model, optimiser, training, or solver descriptions that
+do not duplicate model, optimizer, training, or solver descriptions that
 appear in the main text.
 
 \begin{enumerate}[leftmargin=2em]
 \item \textbf{Software.} Python 3.10.5, PyTorch 2.11.0, torchdiffeq
 0.2.5~\citep{chen2018torchdiffeq}, NumPy 2.2.6, SciPy 1.15.3,
 matplotlib 3.10.9. Hardware: Apple Silicon laptop, CPU-only training.
-Total wall time for the 115-cell sweep: $\approx 8$ hours.
+Total wall time for the 150-run sweep inventory: $\approx 9$ hours.
 \item \textbf{Wall-clock measurement protocol.} Each cell's reported
 wall-clock per forward pass is a single timed call to
 \texttt{model(x0\_val, t)} under \texttt{torch.no\_grad()}, with no warm-up
@@ -282,6 +481,6 @@ $\lambda_J$, and seed; full metadata such as $\mu$, $K$, tolerance overrides,
 and the output directory for follow-up sweeps must be read from the JSON
 \texttt{config} block and directory structure. A cleaner archival release
 would include a manifest or filenames containing every experimental factor.
-\item \textbf{Total cells.} 115 trained runs across all sweeps,
+\item \textbf{Total runs.} 150 trained runs across all sweeps,
 summarised in Table~\ref{tab:cells} of the main text.
 \end{enumerate}

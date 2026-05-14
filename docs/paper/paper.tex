@@ -52,36 +52,29 @@
 \maketitle
 
 \begin{abstract}
-Jacobian regularization is a standard tool for taming the solver cost of Neural
-Ordinary Differential Equations (Neural ODEs)~\citep{finlay2020train}, but its
-behaviour on stiff target systems is not well-characterised. We run a 115-cell
-empirical study on Van der Pol and harmonic oscillator targets, sweeping the
-penalty weight $\lambda_J \in \{0, 10^{-3}, 10^{-2}, 10^{-1}\}$ where
-applicable, the Hutchinson sample count $K \in \{1, 4\}$, the stiffness
-parameter $\mu \in \{10, 25, 50, 100\}$, and the adaptive-solver tolerance
-$r_\text{tol} \in \{10^{-3}, 10^{-5}, 10^{-7}\}$. Our central finding is an
-\textbf{engagement gap}: at $\mu = 10$ (the better-fit setting, validation
-$\mathrm{MSE} = 1.18$) the penalty
-reduces the learned Jacobian Frobenius norm by $10.4\%$ at $\lambda_J = 10^{-1}$;
-at $\mu = 50$ (the poorer-fit setting, $\mathrm{MSE} = 1.94$) the same
-penalty produces only a $1.0\%$ change. The preregistered interaction
-hypothesis H1 ($\Delta\NFE_\text{stiff} > \Delta\NFE_\text{smooth}$) is
-therefore \emph{not} supported in these runs: the penalty engages in a
-non-stiff, better-fit regime and is inert in a stiffer, poorer-fit regime. As
-an ancillary comparison, an unregularised explicit adaptive solver is
-wall-clock about $6.9\times$--$7.9\times$ faster than a fixed-point implicit
-method at matched validation MSE on Van der Pol, with the apparent advantage
-growing with $\mu$ (uncorrected one-sided Wilcoxon $p = 0.031$ at each
-$\mu \in \{25, 50, 100\}$; none survives Bonferroni correction across the
-three-comparison family). At $\mu = 100$ both solvers integrate a poorly-fit
-network, so this is matched-bad MSE rather than matched-good MSE. Finally, the
-observed NFE ratio is consistent with the order-$5$ Runge--Kutta accuracy bound
-$\NFE \propto r_\text{tol}^{-1/6}$: tightening $r_\text{tol}$ by four decades
-grows NFE by $5.54\times$, close to the predicted $4.64\times$, and the fitted
-exponent is $0.186$ versus the theoretical $1/6$. We close with the
-\emph{penalty--fit--stiffness trade-off} these findings suggest: Jacobian
-regularization helps in the better-fit, non-stiff regime and fails to engage in
-the poorer-fit, stiffer regime.
+Jacobian regularization is a widely studied tool for reducing the solver cost
+of Neural Ordinary Differential Equations (Neural ODEs), but its behavior on
+stiff target dynamics is not well understood. We test whether its solver-cost
+benefit increases with stiffness by running a 150-run empirical study on
+harmonic oscillator and Van der Pol targets, sweeping the regularization
+weight, Hutchinson sample count, stiffness parameter $\mu$, and adaptive-solver
+tolerance. The preregistered interaction hypothesis, larger reductions in
+the number of function evaluations (NFE) on stiff targets, is not
+supported. Instead, we find a graded engagement decay: at
+$\lambda_J = 10^{-1}$, the learned Jacobian Frobenius norm drops by $12.8\%$
+at $\mu = 5$, $10.3\%$ at $\mu = 10$, $4.9\%$ at $\mu = 25$, $1.0\%$ at
+$\mu = 50$, and $-1.6\%$ at $\mu = 100$. This decay tracks a collapse in fit
+quality and learned Jacobian scale: in the high-$\mu$ regimes, the network
+underfits the target and already learns a low-Jacobian vector field, leaving
+the penalty with little structure to suppress. The resulting picture is a
+penalty--fit--stiffness trade-off: Jacobian regularization is most active in
+better-fit regimes where the learned dynamics are not solver-stiff, and least
+active where stiffness-motivated regularization would be most useful.
+Ancillary tolerance and implicit-solver comparisons are consistent with this
+diagnosis but are treated as implementation-specific checks rather than
+general claims about stiff integration. Code and result JSONs are available at
+\url{https://github.com/gowaathena/neural-ode.git}; theoretical derivations
+are collected in Appendix~\ref{app:theory}.
 \end{abstract}
 
 \section{Introduction}
@@ -99,7 +92,7 @@ problem by adding a soft Frobenius-norm penalty on $\fjac$ to the training
 loss; they report reductions in the number of solver function evaluations
 (NFE) on density-estimation tasks. \citet{kim2021stiff} document the second
 problem: stiff Neural ODEs are difficult to train at all, since fast and slow
-modes drive the optimiser in conflicting directions.
+modes drive the optimizer in conflicting directions.
 
 \paragraph{Original question and pivot.}
 This work began with a question at the intersection of those two literatures:
@@ -109,42 +102,48 @@ interaction hypothesis (\textbf{H1}) predicting larger NFE reductions on
 stiff targets, a stiffness-suppression hypothesis (\textbf{H2}), and an
 ancillary hypothesis (\textbf{H3}) comparing explicit-regularized against
 implicit-unregularized integration. The preregistered $2{\times}2{\times}2$
-factorial returned a null on H1 and H2; the diagnosis --- three follow-up
+factorial returned a null on H1 and H2; the diagnosis --- follow-up
 sweeps over $\lambda_J$, $K$, and $\mu$ --- became the paper. We find an
-\emph{engagement gap}: at $\mu = 10$ the penalty engages cleanly, at $\mu = 50$
-it is operationally inert, and the contrast appears tied to model fit quality.
+\emph{engagement decay}: at $\mu = 5$ and $\mu = 10$ the penalty engages
+visibly, by $\mu = 50$ it is operationally inert, and by $\mu = 100$ the mean
+effect has vanished. The graded contrast appears tied to model fit quality.
 We interpret this as a \emph{penalty--fit--stiffness trade-off} in this
 experimental setup: regularization requires fit, while increasing target
 stiffness coincides with poorer fit under standard training, so the engagement
 regime and the stiffness regime do not overlap here
 (\S\ref{sec:discussion}).
+The novelty of the result is diagnostic: rather than showing that Jacobian
+regularization fails uniformly on stiff targets, the sweep identifies a regime
+mismatch. The regularizer engages only after the model has learned enough
+target geometry for a Jacobian penalty to matter.
 
 \paragraph{Contributions.}
 \begin{enumerate}[leftmargin=2em]
-\item \textbf{An engagement gap for Jacobian regularization} (\S\ref{sec:engagement}).
+\item \textbf{An engagement decay for Jacobian regularization} (\S\ref{sec:engagement}).
   We show that whether the Frobenius penalty shapes $f_\theta$ depends
   on whether the model has fit the target well enough to develop a high-norm
-  Jacobian. At $\mu = 10$ the penalty engages cleanly; at $\mu = 50$ it does
-  not, across the tested $\lambda_J \in \{0, 10^{-3}, 10^{-2}, 10^{-1}\}$
-  settings and a $K=4$ Hutchinson check.
+  Jacobian. At $\lambda_J = 10^{-1}$, the mean Jacobian drop decays from
+  $12.8\%$ at $\mu = 5$ to $-1.6\%$ at $\mu = 100$; at $\mu = 50$, adding
+  $\lambda_J = 10^{-3}$ and a $K=4$ Hutchinson check still leaves the
+  regularizer operationally inert.
 \item \textbf{A penalty--fit--stiffness trade-off that explains the null}
   (\S\ref{sec:null}, \S\ref{sec:discussion}). The originally-preregistered
-  H1 and H2 are not supported; we give a back-of-envelope mechanism in terms
-  of the penalty-to-task gradient ratio, and show that the engagement and
-  stiffness regimes do not overlap on this task family.
+  H1 and H2 are not supported; we give a loss-scale sanity check, propose the
+  penalty-to-task gradient ratio as a diagnostic, and show that the engagement
+  and stiffness regimes do not overlap on this task family.
 \item \textbf{A tolerance-scaling ratio consistent with the order-$p$ accuracy bound}
   (\S\ref{sec:h0}). A four-decade tolerance tightening grows NFE by $5.54\times$
   (theory predicts $4.64\times$); the fitted exponent is $0.186$, close to the
-  theoretical $1/6$, but the sweep co-scales $a_\text{tol}$ and retrains each
-  tolerance cell, so we treat it as a consistency check rather than an isolated
-  eval-time tolerance law.
-\item \textbf{An implicit-vs-explicit comparison with a stiffness slope}
-  (\S\ref{sec:h3}). On Van der Pol at matched validation MSE, an explicit
-  adaptive solver is about $6.9\times$--$7.9\times$ faster wall-clock than the
-  fixed-point implicit method in \texttt{torchdiffeq}, with the apparent
-  advantage growing as $\mu$ increases --- although at $\mu = 100$ the
-  matched-MSE precondition holds only because both solvers integrate a
-  poorly-fit network.
+  theoretical $1/6$, but the sweep co-scales $a_\text{tol}$ and $r_\text{tol}$
+  and retrains each tolerance cell, so we treat it as a consistency check
+  rather than an isolated eval-time tolerance law.
+\item \textbf{An implementation-specific implicit-vs-explicit caution}
+  (\S\ref{sec:h3}). On Van der Pol at matched validation MSE,
+  \texttt{dopri5} is $6.9\times$--$7.9\times$ faster than the fixed-point
+  implicit baseline. Because the high-$\mu$ networks are poorly fit and that
+  baseline is not Newton-based, we treat this as a practical
+  \texttt{torchdiffeq} caution rather than a general claim about implicit
+  stiff solvers.
 \end{enumerate}
 
 \section{Background and Related Work}
@@ -179,7 +178,7 @@ solvers, attributing the failure to gradient instability from the
 adjoint-system stiffness. Our work confirms a complementary failure mode:
 even when training does not diverge, the network may simply collapse to a
 low-norm vector field that fails to reproduce the stiff dynamics, leaving the
-Jacobian penalty with nothing to suppress.
+Jacobian penalty with little visible structure to suppress.
 
 \paragraph{Step-size theory.}
 The classical Hairer--N\o{}rsett--Wanner treatment~\citep{hairer1993solving,
@@ -188,19 +187,25 @@ In the accuracy-limited regime, an order-$p$ embedded method takes
 $N \propto T \cdot M^{p/(p+1)} \cdot \tau^{-1/(p+1)}$ steps where $M$ bounds
 the $(p{+}1)$-th derivative of the solution; in the stability-limited regime
 on a stiff problem, $N \propto T \cdot \rho(J)/C_p$ where $\rho(J)$ is the
-spectral radius of the Jacobian and $C_p$ is method-dependent. These bounds
-underlie our predictions for both H0 (\S\ref{sec:h0}) and the conditional
-interaction \eqref{eq:interaction-prediction} in Appendix~\ref{app:interaction}.
+spectral radius of the Jacobian and $C_p$ is method-dependent. In our
+experiments these are trajectory-local diagnostics, and the tolerance law is
+only an idealised scaling check because practical solvers use coupled
+absolute/relative error weights (Appendix~\ref{app:stability} and
+\ref{app:trunc-bound}). These bounds underlie our predictions for both H0
+(\S\ref{sec:h0}) and the conditional interaction
+\eqref{eq:interaction-prediction} in Appendix~\ref{app:interaction}.
 
 \paragraph{Implicit integration.}
-The Dahlquist barrier~\citep{dahlquist1963special} establishes that
-$A$-stability is incompatible with linear-multistep methods of order
-$> 2$. Implicit Runge--Kutta methods such as Radau IIA and Kvaerno do
+The second Dahlquist barrier~\citep{dahlquist1963special} establishes that no
+$A$-stable linear multistep method can have order greater than $2$; even at
+order $2$, $A$-stable methods are subject to additional restrictions. Implicit
+Runge--Kutta methods such as Radau IIA and Kvaerno do
 achieve $A$- and $L$-stability at higher order but require Newton iteration
 per step. \citet{rackauckas2017differentialequations} provide a mature Julia
 ecosystem for these solvers; our work uses the simpler fixed-point implicit
 Adams in torchdiffeq~\citep{chen2018torchdiffeq} as the implicit baseline and
-notes the limitations of this choice in \S\ref{sec:limitations}.
+notes the limitations of this choice in \S\ref{sec:limitations} and
+Appendix~\ref{app:implicit-cost}.
 
 \section{Methods}
 \label{sec:methods}
@@ -217,12 +222,14 @@ $\dot x_2 = -\omega^2 x_1 - 2\gamma x_2$, with $\omega = 1$, $\gamma = 0.1$.
 The Jacobian is constant; the analytic solution provides a known-correct
 reference.
 
-\paragraph{Van der Pol oscillator (parameterised stiffness).}
+\paragraph{Van der Pol oscillator (parameterized stiffness).}
 The classical relaxation oscillator~\citep{vanderpol1926relaxation}
-$\dot x_1 = x_2$, $\dot x_2 = \mu (1 - x_1^2) x_2 - x_1$. The stiffness
-ratio scales with $\mu$. We use $\mu \in \{10, 25, 50, 100\}$, where
+$\dot x_1 = x_2$, $\dot x_2 = \mu (1 - x_1^2) x_2 - x_1$. The time-scale
+separation of the relaxation dynamics increases with $\mu$, although the
+instantaneous Jacobian spectrum varies substantially along the trajectory. We
+use $\mu \in \{5, 10, 25, 50, 100\}$, where
 $\mu = 50$ is the proposal's preregistered ``mildly stiff'' setting and
-the other values are added post-hoc to characterise the engagement regime
+the other values are added post-hoc to characterize the engagement regime
 and to test the H3 stiffness slope.
 
 For each system, $n_\text{train} = 256$ and $n_\text{val} = 64$ initial
@@ -266,8 +273,10 @@ implementation uses $K$ samples averaged with \texttt{create\_graph=True} so
 that gradients flow to $\theta$. We test $K \in \{1, 4\}$.
 
 The sampled $x$ values are \emph{detached} so that the penalty gradient does
-not backpropagate through the ODE solve into the model via the trajectory; this
-matches the augmented-state derivation in \citet{finlay2020train} \S 3.
+not backpropagate through the ODE solve into the model via the trajectory. This
+is the ground-truth-support regularizer $R_\mathrm{gt}$ in
+Appendix~\ref{app:penalty-mismatch}, not the learned-trajectory
+augmented-state penalty from \citet{finlay2020train} \S 3.
 
 \subsection{Solvers}
 \label{sec:solvers}
@@ -320,21 +329,24 @@ target solver. The reported metrics are:
 \item Step-size statistics (mean only, derived from NFE / stages-per-step for
   adaptive solvers).
 \end{itemize}
+The Jacobian and stiffness-ratio quantities are trajectory-local diagnostics
+on the validation grid, not global stiffness certificates
+(Appendix~\ref{app:stability}).
 
 \subsection{Experimental design}
 \label{sec:design}
 
-The full set of 115 cells comprises six sweeps:
+The full inventory contains 150 trained runs across seven sweeps:
 
 \begin{table}[t]
 \centering
 \small
-\caption{Experimental matrix. ``Total cells'' counts (configurations $\times$
-  seeds). All sweeps use 5 seeds.}
+\caption{Experimental matrix. Run counts are configurations $\times$ seeds;
+  all sweeps use 5 seeds.}
 \label{tab:cells}
 \begin{tabular}{@{}p{0.22\textwidth} p{0.34\textwidth} p{0.26\textwidth} c@{}}
 \toprule
-Sweep & Varies & Holds fixed & Cells \\
+Sweep & Varies & Holds fixed & Runs \\
 \midrule
 Core + ancillary  & \{harmonic, vdp$_{\mu=50}$\} $\times$ \{dopri5, rk4\} $\times$ $\lambda_J \in \{0, 10^{-3}\}$, plus vdp$_{\mu=50}$ implicit\_adams at $\lambda_J=0$ & $K=1$, $r_\text{tol}=10^{-5}$ & 45 \\
 \addlinespace[2pt]
@@ -347,8 +359,10 @@ $\mu{=}10$ engagement & $\lambda_J \in \{0, 10^{-2}, 10^{-1}\}$ & vdp$_{\mu=10}$
 Tolerance sweep & train/eval $r_\text{tol} \in \{10^{-3}, 10^{-7}\}$ $\times$ \{dopri5, implicit\_adams\} & vdp$_{\mu=50}$, $\lambda_J{=}0$ & 20 \\
 \addlinespace[2pt]
 $\mu$ sweep for H3 & $\mu \in \{25, 100\}$ $\times$ \{dopri5, implicit\_adams\} & $\lambda_J{=}0$, $r_\text{tol}{=}10^{-5}$ & 20 \\
+\addlinespace[2pt]
+Graded engagement additions & $\mu{=}5$ with $\lambda_J \in \{0, 10^{-2}, 10^{-1}\}$, plus $\mu \in \{25,100\}$ with $\lambda_J \in \{10^{-2},10^{-1}\}$ & vdp, dopri5, $K{=}1$, $r_\text{tol}{=}10^{-5}$ & 35 \\
 \midrule
-\textbf{Total} & & & \textbf{115} \\
+\textbf{Total} & & & \textbf{150} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -367,7 +381,7 @@ do not survive Bonferroni correction at $\alpha/3 = 0.017$.
 \section{Results}
 \label{sec:results}
 
-\subsection{Solver-cost characterisation}
+\subsection{Solver-cost characterization}
 \label{sec:cost-baseline}
 
 Table~\ref{tab:baseline-cost} reports the baseline-NFE and wall-clock cost of
@@ -402,11 +416,11 @@ Target & Solver & $\NFE$ & Wall (s) & $\mathrm{MSE}_\text{val}$ \\
 \subsection{H0: NFE ratios are consistent with tolerance scaling}
 \label{sec:h0}
 
-Theorem~\ref{thm:accuracy} (Appendix~\ref{app:trunc-bound}) predicts that for
-an order-$p$ embedded RK method, the number of accepted steps scales as
-$N \propto \tau^{-1/(p+1)}$. For \texttt{dopri5} with $p = 5$, this gives
-$\tau^{-1/6}$, so a four-orders-of-magnitude tolerance tightening should yield
-a $10^{4/6} \approx 4.64\times$ NFE increase.
+Theorem~\ref{thm:accuracy} (Appendix~\ref{app:trunc-bound}) gives the idealised
+order-$p$ adaptive RK sanity check: in a scalar-tolerance regime, accepted
+steps scale as $N \propto \tau^{-1/(p+1)}$. For \texttt{dopri5} with $p = 5$,
+this gives $\tau^{-1/6}$, so a four-orders-of-magnitude tolerance tightening
+would suggest a $10^{4/6} \approx 4.64\times$ NFE increase.
 
 Table~\ref{tab:tol-sweep} shows the empirical scaling. These cells retrain the
 model under the corresponding train-time solver tolerance and then evaluate
@@ -418,8 +432,9 @@ with the predicted $4.64\times$ to within $19\%$. The fitted exponent
 $\alpha = \log(5.54)/\log(10^4) = 0.186$ is close to the theoretical
 $\alpha = 1/(p+1) = 0.167$. Two caveats apply. First, our tolerance sweep
 co-scales $a_\text{tol}$ with $r_\text{tol}$ (both move four decades
-together), so the fitted exponent reflects sensitivity to both tolerances,
-not just $r_\text{tol}$. Second, because the model is retrained at each
+together), and the solver controls a weighted error involving roughly
+$a_\text{tol}+r_\text{tol}|x|$, so the fitted exponent reflects sensitivity to
+both tolerances, not just $r_\text{tol}$. Second, because the model is retrained at each
 tolerance and only three tolerance points are available, the result should be
 read as a consistency check on the expected scaling ratio rather than a clean
 estimate of the asymptotic exponent. Validation MSE is effectively unchanged
@@ -451,61 +466,82 @@ Solver & $r_\text{tol}$ & $\NFE$ & Wall (s) & Factor vs $10^{-3}$ \\
 \subsection{The engagement regime}
 \label{sec:engagement}
 
-The central empirical finding of this paper is an \emph{engagement gap}:
-Jacobian regularization shapes $f_\theta$ at $\mu = 10$ but is operationally
-inert at $\mu = 50$, an observed contrast that tracks model fit quality in
-these runs. With only two regularized $\mu$ values, we cannot resolve whether
-there is a sharp transition; we describe it as a gap accordingly.
-Section~\ref{sec:h3}
-extends the comparison across $\mu \in \{25, 100\}$ but only at $\lambda_J = 0$.
-
-Table~\ref{tab:engagement} reports the learned Jacobian Frobenius norm as a
-function of $\lambda_J$ at two stiffness levels. At $\mu = 10$, where the
-network achieves $\mathrm{MSE}_\text{val} = 1.18$ and the learned Jacobian
-Frobenius norm is $0.516$, $\lambda_J = 10^{-1}$ produces a $\mathbf{10.35\%}$
-reduction in $\|\fjac\|_F$. At $\mu = 50$, where $\mathrm{MSE}_\text{val} =
-1.94$ and the learned Jacobian Frobenius norm is only $0.071$ (a sevenfold
-collapse relative to $\mu = 10$), the same $\lambda_J = 10^{-1}$ produces only
-a $\mathbf{1.04\%}$ change. The penalty engages in the former regime and is
-operationally inert in the latter.
+The central empirical finding of this paper is a \emph{graded engagement gap},
+or more descriptively an \emph{engagement decay}: Jacobian regularization
+shapes $f_\theta$ at lower $\mu$ but becomes operationally inert as target
+stiffness and poor fit increase. Table~\ref{tab:engagement} reports the full
+rectangular engagement sweep over
+$\mu \in \{5,10,25,50,100\}$ and
+$\lambda_J \in \{0,10^{-2},10^{-1}\}$. At $\lambda_J = 10^{-1}$, the
+mean Jacobian drop is monotone in $\mu$: $12.8\%$ at $\mu=5$, $10.3\%$ at
+$\mu=10$, $4.9\%$ at $\mu=25$, $1.0\%$ at $\mu=50$, and $-1.6\%$ at
+$\mu=100$. This is a mean trend over five seeds, not a claim that every
+individual seed orders perfectly.
+This monotone-in-the-mean decay is the clearest evidence in the paper: in
+these runs, the regularizer's effect weakens as the learned baseline Jacobian
+collapses.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.7\textwidth]{figures/fig_engagement.pdf}
-\caption{Engagement regime. Learned Jacobian Frobenius norm versus
-  regularization weight $\lambda_J$, on Van der Pol at $\mu = 10$ (better-fit)
-  and $\mu = 50$ (poorer-fit). Each point is the mean over 5 seeds; bars are
-  $\pm 1$ std. At $\mu = 10$ the penalty suppresses $\|\fjac\|_F$ monotonically
-  as $\lambda_J$ increases; at $\mu = 50$ the
-  curve is essentially flat.}
+\includegraphics[width=0.78\textwidth]{figures/fig_engagement.pdf}
+\caption{Graded engagement regime. Learned Jacobian Frobenius norm versus
+  regularization weight $\lambda_J$, on Van der Pol across the
+  $\mu$ sweep. Each point is the mean over 5 seeds; bars are $\pm 1$ std.
+  The curves flatten as $\mu$ increases, indicating that the same penalty
+  weight has progressively less structure to suppress in the poorer-fit
+  high-$\mu$ regimes.}
 \label{fig:engagement}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.68\textwidth]{figures/fig_engagement_decay.pdf}
+\caption{Engagement decay with target stiffness parameter $\mu$. Percent
+  reduction in learned Jacobian Frobenius norm at $\lambda_J = 10^{-1}$,
+  computed against the $\lambda_J=0$ baseline at the same $\mu$. The decay is
+  monotone in the mean across the tested $\mu$ values, reaching a slightly
+  negative drop at $\mu=100$.}
+\label{fig:engagement-decay}
 \end{figure}
 
 \begin{table}[t]
 \centering
-\caption{Engagement regime data. Mean $\pm$ std over 5 seeds. Drop is
-  computed against the $\lambda_J = 0$ baseline at the same $\mu$.}
+\small
+\caption{Engagement sweep data. Mean $\pm$ std over 5 seeds. Drop is computed
+  against the $\lambda_J=0$ baseline at the same $\mu$.}
 \label{tab:engagement}
 \begin{tabular}{c c r r r r}
 \toprule
-$\mu$ & $\lambda_J$ & $\|\fjac\|_F$ & Drop & $\NFE$ & $\mathrm{MSE}_\text{val}$ \\
+$\mu$ & $\lambda_J$ & $\mathrm{MSE}_\text{val}$ & $\|\fjac\|_F$ & Drop & $\NFE$ \\
 \midrule
-\multirow{3}{*}{10} & 0       & $0.5164 \pm 0.013$ & --        & $129.2 \pm 5.0$  & $1.184 \pm 0.020$ \\
-                    & $10^{-2}$ & $0.5072 \pm 0.012$ & $1.78\%$  & $137.6 \pm 9.1$  & $1.229 \pm 0.067$ \\
-                    & $10^{-1}$ & $0.4630 \pm 0.013$ & $\mathbf{10.35\%}$ & $132.8 \pm 9.9$  & $1.205 \pm 0.033$ \\
+\multirow{3}{*}{5}  & 0          & $0.900 \pm 0.015$ & $0.7691 \pm 0.026$ & --        & $196.4 \pm 10.0$ \\
+                    & $10^{-2}$ & $0.900 \pm 0.014$ & $0.7518 \pm 0.021$ & $2.3\%$   & $194.0 \pm 18.0$ \\
+                    & $10^{-1}$ & $0.929 \pm 0.059$ & $0.6705 \pm 0.027$ & $\mathbf{12.8\%}$ & $191.6 \pm 12.4$ \\
 \midrule
-\multirow{4}{*}{50} & 0          & $0.0714 \pm 0.017$ & --        & $141.2 \pm 27.6$ & $1.938 \pm 0.259$ \\
-                    & $10^{-3}$  & $0.0713 \pm 0.016$ & $0.07\%$  & $140.0 \pm 26.2$ & $1.930 \pm 0.269$ \\
-                    & $10^{-2}$  & $0.0715 \pm 0.016$ & $-0.20\%$ & $138.8 \pm 27.3$ & $1.928 \pm 0.269$ \\
-                    & $10^{-1}$  & $0.0706 \pm 0.015$ & $\mathbf{1.04\%}$ & $136.4 \pm 26.0$ & $1.929 \pm 0.269$ \\
+\multirow{3}{*}{10} & 0          & $1.184 \pm 0.020$ & $0.5164 \pm 0.013$ & --        & $129.2 \pm 5.0$ \\
+                    & $10^{-2}$ & $1.229 \pm 0.067$ & $0.5072 \pm 0.012$ & $1.8\%$   & $137.6 \pm 9.1$ \\
+                    & $10^{-1}$ & $1.205 \pm 0.033$ & $0.4630 \pm 0.013$ & $\mathbf{10.3\%}$ & $132.8 \pm 9.9$ \\
+\midrule
+\multirow{3}{*}{25} & 0          & $1.650 \pm 0.178$ & $0.1754 \pm 0.080$ & --        & $147.2 \pm 10.7$ \\
+                    & $10^{-2}$ & $1.645 \pm 0.167$ & $0.1719 \pm 0.077$ & $2.0\%$   & $140.0 \pm 16.4$ \\
+                    & $10^{-1}$ & $1.633 \pm 0.171$ & $0.1667 \pm 0.071$ & $\mathbf{4.9\%}$ & $138.8 \pm 14.3$ \\
+\midrule
+\multirow{3}{*}{50} & 0          & $1.938 \pm 0.259$ & $0.0713 \pm 0.017$ & --        & $141.2 \pm 27.6$ \\
+                    & $10^{-2}$ & $1.928 \pm 0.269$ & $0.0715 \pm 0.016$ & $-0.2\%$  & $138.8 \pm 27.3$ \\
+                    & $10^{-1}$ & $1.929 \pm 0.269$ & $0.0706 \pm 0.015$ & $\mathbf{1.0\%}$ & $136.4 \pm 26.0$ \\
+\midrule
+\multirow{3}{*}{100} & 0         & $2.376 \pm 0.630$ & $0.0348 \pm 0.007$ & --        & $130.4 \pm 20.2$ \\
+                     & $10^{-2}$ & $2.378 \pm 0.639$ & $0.0354 \pm 0.007$ & $-1.7\%$  & $129.2 \pm 18.2$ \\
+                     & $10^{-1}$ & $2.378 \pm 0.640$ & $0.0354 \pm 0.007$ & $\mathbf{-1.6\%}$ & $129.2 \pm 18.2$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \paragraph{Fit calibration against trivial predictors.}
-The raw MSE values in Table~\ref{tab:engagement} are easier to interpret
-relative to trivial validation-set predictors. On the same validation
-trajectories, a zero-trajectory predictor obtains MSE $2.51 \pm 0.01$ at
+For the two settings used in the original gap diagnosis, the raw MSE values
+in Table~\ref{tab:engagement} are easier to interpret relative to trivial
+validation-set predictors. On the same validation trajectories, a
+zero-trajectory predictor obtains MSE $2.51 \pm 0.01$ at
 $\mu = 10$ and $2.70 \pm 0.22$ at $\mu = 50$; an oracle constant predictor
 using the validation-set mean obtains $2.51 \pm 0.01$ and $2.65 \pm 0.22$,
 respectively. The learned \texttt{dopri5} baseline improves over this
@@ -513,23 +549,48 @@ constant predictor by $52.8\%$ at $\mu = 10$ but only $26.8\%$ at
 $\mu = 50$. Thus ``poorer fit'' here means not only a larger absolute MSE,
 but a substantially smaller reduction over a trivial constant trajectory.
 
+\begin{table}[t]
+\centering
+\caption{True-target Jacobian calibration for the engagement settings. The
+  true Van der Pol Jacobian norm is computed analytically along the same
+  20-point validation-time subsample used for learned-Jacobian diagnostics.
+  Appendix~\ref{app:vdp-jac-calibration} derives the formula. Mean $\pm$ std
+  over 5 seeds.}
+\label{tab:true-jac-calibration}
+\begin{tabular}{c r r r}
+\toprule
+$\mu$ & True target $\|J\|_F$ & Learned baseline $\|\fjac\|_F$ & Target / learned \\
+\midrule
+10 & $23.27 \pm 0.83$ & $0.5164 \pm 0.013$ & $45.1\times$ \\
+50 & $99.82 \pm 2.89$ & $0.0714 \pm 0.017$ & $1{,}399\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \paragraph{Mechanism.}
 The most plausible mechanism is that when the model fits the stiffer target
 poorly, $f_\theta$ collapses toward a near-constant vector field whose
 Jacobian norm is already much smaller than the network would need to
-reproduce the true Van der Pol dynamics. At $\mu = 50$, $\|\fjac\|_F = 0.071$
-is approximately one seventieth of the true Jacobian magnitude at the limit
-cycle, which is of order $\mu$. The penalty term then has nothing to suppress.
+reproduce the true Van der Pol dynamics. Table~\ref{tab:true-jac-calibration}
+shows that this gap is especially severe at $\mu = 50$: the learned baseline
+Jacobian norm is roughly three orders of magnitude below the analytic target
+Jacobian norm on the same validation subsample, using the analytic calibration
+in Appendix~\ref{app:vdp-jac-calibration}. The penalty term then has little
+visible structure to suppress.
 
 \emph{Back-of-envelope.} At $\mu = 50$, $\lambda_J = 10^{-1}$, and
 $\|\fjac\|_F = 0.071$, the penalty value is $\lambda_J \|\fjac\|_F^2 \approx
 5.0 \times 10^{-4}$, while the task loss is $\approx 1.93$. The penalty
 contributes a relative magnitude of order $2.6 \times 10^{-4}$ to the total
-loss --- Adam's per-parameter gradient normalisation cannot amplify a signal
-this small against the task gradient on every step. At $\mu = 10$ the same
-calculation gives $0.1 \times 0.516^2 / 1.18 \approx 2.3 \times 10^{-2}$, two
-orders of magnitude larger and within the regime where the penalty can
-register at all. This calculation supports the engagement-gap mechanism.
+loss, suggesting a weak penalty signal in this operating regime. This is only
+a loss-scale proxy: the direct engagement diagnostic would be the
+penalty-to-task gradient ratio and gradient alignment in
+Appendix~\ref{app:engagement-criterion}, which we did not measure. At
+$\mu = 10$ the same calculation gives
+$0.1 \times 0.516^2 / 1.18 \approx 2.3 \times 10^{-2}$, two orders of
+magnitude larger and within the regime where the penalty can register at all.
+This calculation is consistent with the engagement-decay mechanism, rather than
+direct evidence for it.
 Bumping the Hutchinson sample
 count from $K = 1$ to $K = 4$ does not change this --- the variance of the
 estimator is not the binding constraint --- and we report the $K = 4$ result
@@ -541,11 +602,13 @@ The penalty in our implementation is evaluated at sampled \emph{ground-truth}
 trajectory points (\S\ref{sec:reg}), not along the model's predicted
 trajectory. When the model is poorly fit (val\,MSE $= 1.94$ at $\mu = 50$),
 its forward integration visits states quite different from the ground-truth
-trajectory, so the penalty's gradient signal partially cancels with the
-task-loss gradient pushing $f_\theta$ \emph{toward} the high-Jacobian true
-dynamics. The augmented-state penalty integration of \citet{finlay2020train}
-evaluates the penalty along the learned trajectory and would not suffer
-this misalignment; we discuss this in \S\ref{sec:limitations}.
+trajectory. The penalty may therefore be weak not only because the learned
+field is low-Jacobian, but also because the penalty is evaluated on a support
+the learned trajectory does not actually visit.
+Appendix~\ref{app:penalty-mismatch} formalises this mismatch; the current
+experiment conflates it with low-Lipschitz collapse. The augmented-state
+penalty integration of \citet{finlay2020train} evaluates the penalty along the
+learned trajectory and would test this mechanism more directly.
 
 \begin{table}[t]
 \centering
@@ -566,11 +629,13 @@ $K$ & $\|\fjac\|_F$ & Drop vs $\lambda_J = 0$ \\
 At $\mu = 10$ where the penalty engages, $\NFE$ does \emph{not} decrease
 (Table~\ref{tab:engagement}); if anything, $\NFE$ rises slightly. The learned
 spectral stiffness ratio at $\mu = 10$ is $\approx 1.4$, indicating the
-system is non-stiff at this $\mu$ value. The stability mechanism that
+learned vector field appears non-stiff by our diagnostic at this $\mu$ value.
+The stability mechanism that
 Proposition~\ref{prop:interaction} relies on (Appendix~\ref{app:interaction})
-therefore does not apply: there is no stiff step-size restriction for the
-penalty to relax. NFE is accuracy-limited in this regime, and the modest
-penalty-induced changes in higher derivatives are within seed variance.
+therefore does not appear to apply to the learned dynamics: there is no
+observed stiff step-size restriction for the penalty to relax. NFE appears
+accuracy-limited in this regime, and the modest penalty-induced changes in
+higher derivatives are within seed variance.
 
 \subsection{H3: implicit-vs-explicit with a stiffness slope}
 \label{sec:h3}
@@ -630,7 +695,7 @@ As $\mu$ rises, $f_\theta$ becomes a low-norm approximation that is easy to
 integrate for any solver. Validation MSE grows from $1.65$ at $\mu = 25$ to
 $2.38$ at $\mu = 100$. The learned spectral stiffness ratio at $\mu = 100$
 can be enormous numerically (driven by near-singular eigenvalues), but this
-is an artefact of poor fit rather than learned stiff dynamics. The
+is an artifact of poor fit rather than learned stiff dynamics. The
 matched-MSE precondition holds across our $\mu$ values (Table~\ref{tab:h3}),
 but at $\mu = 100$ it is matched at $\mathrm{MSE} \approx 2.38$ ---
 \emph{matched-bad} accuracy, not matched-good accuracy. The slope statement
@@ -656,7 +721,9 @@ $A$-stability benefit a Newton-based BDF or Radau IIA would deliver. Our
 H3 result therefore says: for practitioners in the \texttt{torchdiffeq}
 ecosystem on mildly stiff Neural ODEs, switching to \texttt{implicit\_adams}
 is a wall-clock regression, not an improvement. It does not say that
-implicit integration in general is a bad idea on stiff Neural ODEs.
+implicit integration in general is a bad idea on stiff Neural ODEs. The
+Newton-based implicit cost model in Appendix~\ref{app:implicit-cost} is
+included for context and does not describe this exact baseline.
 
 \subsection{H1 and H2: null results with mechanism}
 \label{sec:null}
@@ -664,23 +731,28 @@ implicit integration in general is a bad idea on stiff Neural ODEs.
 The proposal's preregistered hypotheses H1 (NFE reduction larger on stiff
 than smooth targets) and H2 (stiffness suppression larger on stiff targets)
 are \emph{not} supported by our data. At the originally-preregistered
-$\mu = 50$, $\lambda_J = 10^{-3}$ setting, the regularization is operationally
-inert (Table~\ref{tab:engagement}). Extending the sweep to $\lambda_J = 10^{-1}$
-and $K = 4$ does not rescue H1: the residual $\Delta\NFE$ between $\lambda_J =
-0$ and $\lambda_J = 10^{-1}$ at $\mu = 50$ is $\approx 5$ NFE on a baseline
-of $141 \pm 28$ NFE --- well within seed noise. Running the sweep at
-$\mu = 10$ where the penalty does engage produces no NFE reduction either,
-because the system is non-stiff at that $\mu$ value.
+$\mu = 50$, $\lambda_J = 10^{-3}$ setting, the Jacobian drop was only
+$0.07\%$. Increasing the weight to $\lambda_J = 10^{-1}$ and the Hutchinson
+sample count to $K = 4$ does not rescue H1: at $\mu = 50$ the residual
+$\Delta\NFE$ between $\lambda_J = 0$ and $\lambda_J = 10^{-1}$ is
+$\approx 5$ NFE on a baseline of $141 \pm 28$ NFE --- well within seed noise.
+Across the graded engagement sweep (Table~\ref{tab:engagement}), the largest
+Jacobian drops occur at $\mu = 5$ and $\mu = 10$, where the learned vector
+fields appear non-stiff by our diagnostic; by the high-$\mu$ regimes where a
+stability benefit would be most useful, the penalty has little or no
+Jacobian effect left to convert into an NFE gain.
 
 We interpret the null as a \emph{failure of observed regime overlap}: in this
 setup, the penalty engages where the learned dynamics are not stiff enough to
 produce an NFE benefit, and is inert in the stiffer setting where such a
 benefit would be most useful.
 Proposition~\ref{prop:interaction} (Appendix~\ref{app:interaction}) predicts
-a positive interaction only \emph{conditional} on engagement, an assumption
-that fails on this task family; the proposition therefore does not constrain
-our null result, but neither is it falsified --- it survives only as a
-hypothesis for a hypothetical regime where penalty and stiffness co-engage.
+a positive interaction only \emph{conditional} on spectral engagement,
+accuracy-scale engagement, and learned stiffness. Those assumptions do not
+co-occur in this task family; the proposition therefore does not constrain our
+null result, but neither is it falsified. Instead, it survives only as a hypothesis
+for a hypothetical regime where fit, penalty engagement, and learned stiffness
+co-engage.
 
 \paragraph{Preregistration deviation.}
 The proposal preregistered $\lambda_J$ selection on validation MSE within
@@ -705,8 +777,9 @@ when Jacobian regularization is useful for Neural ODEs:
   upper-bounds the spectral radius of $\fjac$. This control is indirect and
   potentially loose: reducing $\|\fjac\|_F$ reduces an upper bound on
   $\rho(\fjac)$, but it does not specifically target the fast/slow eigenvalue
-  structure that makes a system stiff, nor does it guarantee lower solver
-  cost. The penalty therefore has an \emph{engagement requirement}: the
+  structure that makes a system stiff, nor does it guarantee proportional
+  spectral-radius shrinkage or lower solver cost (Appendix~\ref{app:interaction}).
+  The penalty therefore has an \emph{engagement requirement}: the
   network must have learned a high-norm vector field for the penalty to have
   something to suppress.
 \item Engagement requires \emph{fit}: the network must have fit the target
@@ -723,8 +796,9 @@ when Jacobian regularization is useful for Neural ODEs:
   stable.)
 \end{enumerate}
 The three-way trade-off suggests that Jacobian regularization in this setup
-helps most where it is least needed (well-fit, non-stiff systems) and helps
-least where it is most needed (poorly-fit, stiff systems). This is consistent
+appears most active where it is least needed (well-fit learned dynamics without
+an observed stiff step-size restriction) and least active where it is most
+needed (poorly-fit, stiffer targets). This is consistent
 with the positive results in \citet{finlay2020train}, where the
 density-estimation tasks afford good fit, and with the training-difficulty
 results in \citet{kim2021stiff}.
@@ -747,15 +821,15 @@ activations. A wider or deeper network might develop sufficient Lipschitz
 constant on Van der Pol at $\mu = 50$ to fall back into the engagement
 regime; this is an important sweep for future work.
 
-\paragraph{Single optimiser.}
+\paragraph{Single optimizer.}
 Adam adapts the per-parameter learning rate using gradient statistics, which
 could amplify or attenuate the penalty gradient relative to the task gradient
 in ways that are not transparent. Comparing against SGD with momentum (and
-optionally a learning-rate decay schedule) would isolate the optimiser's role
+optionally a learning-rate decay schedule) would isolate the optimizer's role
 from the penalty's role.
 
 \paragraph{Single stiff system.}
-Van der Pol is a 2D limit-cycle system with parameterised stiffness; the
+Van der Pol is a 2D limit-cycle system with parameterized stiffness; the
 engagement regime we identified may be specific to this geometry. Robertson
 kinetics~\citep{robertson1966solution} provides a much stiffer
 $d = 3$ alternative and would test whether the trade-off holds beyond limit
@@ -793,21 +867,22 @@ horizon effect.
 \paragraph{Raw time-input confound.}
 The vector field receives raw time $t$ as an input feature. Because
 $T_\text{end}$ scales with $\mu$, the range of the time feature also grows with
-target stiffness, potentially changing the optimisation problem independently
-of stiffness itself. A cleaner follow-up would either normalise time to
+target stiffness, potentially changing the optimization problem independently
+of stiffness itself. A cleaner follow-up would either normalize time to
 $[0,1]$ for every $\mu$ value or compare against an autonomous vector field
 that does not receive $t$.
 
-\paragraph{Ground-truth penalty sampling and the augmented-state alternative.}
+\paragraph{Penalty support mismatch.}
 We sample penalty evaluation points from the ground-truth training trajectory
 rather than along the predicted learned trajectory (\S\ref{sec:reg}). On a
 well-fit network the two distributions are close, but on a poorly-fit
-network they diverge --- the model's forward integration visits states that
+network they diverge. The model's forward integration visits states that
 the penalty is not evaluated at, decoupling the penalty's gradient signal
-from the trajectory whose cost the user cares about. The augmented-state
-penalty integration of~\citet{finlay2020train} avoids this by computing
+from the trajectory whose cost the user cares about. Appendix~\ref{app:penalty-mismatch}
+formalises this distinction. The augmented-state penalty integration
+of~\citet{finlay2020train} avoids this by computing
 $\int_0^T \|\fjac(x_t, t)\|_F^2 dt$ along the learned trajectory inside the
-ODE solve; we did not implement this variant, and our engagement-gap
+ODE solve; we did not implement this variant, and our engagement-decay
 mechanism therefore conflates two contributing causes: (a) low-Lipschitz
 collapse of $f_\theta$, and (b) misalignment between penalty support and
 learned trajectory. A clean separation of these mechanisms is the most
@@ -818,12 +893,12 @@ Future work could attempt to relax any of the three legs of the
 penalty--fit--stiffness trade-off (\S\ref{sec:discussion}):
 \begin{itemize}[leftmargin=2em]
 \item Replace the soft Frobenius penalty by hard Lipschitz constraints
-  (spectral normalisation per layer, or projected gradient onto a
+  (spectral normalization per layer, or projected gradient onto a
   Lipschitz-bounded set), which would shape $f_\theta$ even when the
   unconstrained optimum is low-Lipschitz.
 \item Use the augmented-state penalty integration of \citet{finlay2020train}
   so the penalty is evaluated along the learned trajectory.
-\item Loss-normalised regularization: replace $\lambda_J$ by
+\item Loss-normalized regularization: replace $\lambda_J$ by
   $\lambda_J \cdot \texttt{detach}(\mathcal{L}_\text{task})^{-1}$ so the
   penalty is scale-invariant to a difficult task loss.
 \item Specialised training for stiff Neural ODEs as in \citet{kim2021stiff}
@@ -835,16 +910,20 @@ penalty--fit--stiffness trade-off (\S\ref{sec:discussion}):
 \label{sec:conclusion}
 
 The preregistered question was whether Jacobian regularization reduces
-Neural ODE solver cost more on stiff systems than on smooth ones. The
-preregistered factorial returned a null. The four follow-up sweeps reframe
-the null as a \emph{penalty--fit--stiffness trade-off}: regularization
-requires fit, while higher target stiffness coincides with poorer fit in this
-training setup, and on this task family the two regimes do not overlap. Future
-work that breaks the trade-off via
-hard Lipschitz constraints, augmented-state penalty integration, or
-specialised training for stiff Neural ODEs is the natural next step. All
-115 result JSONs, configuration files, and theoretical derivations are
-bundled with this paper.
+Neural ODE solver cost more on stiff systems than on smooth ones. In this
+Van der Pol study, the answer is no: the expected stiff-target interaction
+does not appear. The follow-up sweeps show why. Jacobian regularization only
+engages when the learned model has fit the target well enough to develop a
+high-Jacobian vector field. As $\mu$ increases, standard training produces
+poorer fits and lower learned Jacobian norms, so the regularizer loses the
+structure it was meant to suppress. The main contribution of this project is
+therefore not a new solver-speedup result, but a diagnostic failure mode:
+stiffness can make Jacobian regularization irrelevant by preventing the Neural
+ODE from learning stiff dynamics in the first place. Future work should test
+whether this trade-off can be broken by hard Lipschitz constraints,
+augmented-state trajectory regularization, or training methods designed
+specifically for stiff Neural ODEs. All 150 result JSONs, configuration files,
+and theoretical derivations are bundled with this paper.
 
 \bibliographystyle{plainnat}
 \bibliography{refs}

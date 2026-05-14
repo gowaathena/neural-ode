@@ -14,12 +14,12 @@ oscillator and Van der Pol trajectories. It compares:
 
 - Jacobian regularization weights `lambda_J in {0, 1e-3, 1e-2, 1e-1}` where applicable.
 - Solvers `dopri5`, `rk4`, and `implicit_adams` through `torchdiffeq`.
-- Van der Pol stiffness settings `mu in {10, 25, 50, 100}`.
+- Van der Pol stiffness settings `mu in {5, 10, 25, 50, 100}`.
 - Train/eval solver tolerances `rtol in {1e-3, 1e-5, 1e-7}` for the tolerance sweep.
 
-The main finding is an engagement gap: the Jacobian penalty visibly reduces the
-learned Jacobian norm in the better-fit, non-stiff Van der Pol setting
-(`mu=10`), but is nearly inert in the poorer-fit, stiffer setting (`mu=50`).
+The main finding is an engagement decay: the Jacobian penalty visibly reduces
+the learned Jacobian norm at lower `mu`, but the effect fades across the
+Van der Pol sweep and is nearly inert in the poorer-fit, stiffer settings.
 The paper frames this as a penalty-fit-stiffness trade-off rather than as a
 universal claim about all stiff Neural ODEs.
 

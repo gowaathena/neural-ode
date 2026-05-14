@@ -2,7 +2,9 @@
 
 Outputs:
     docs/paper/figures/fig_engagement.pdf   -- Jacobian Frobenius vs lambda_J
-                                               at mu=10 (engages) and mu=50 (no-op).
+                                               across the mu engagement sweep.
+    docs/paper/figures/fig_engagement_decay.pdf
+                                            -- percent Jacobian drop vs mu.
     docs/paper/figures/fig_h3_slope.pdf     -- A1/E3 wall-clock ratio vs mu.
     docs/paper/figures/fig_tol_scaling.pdf  -- NFE vs rtol (log-log) with
                                                theoretical slope reference.
@@ -69,33 +71,76 @@ def mean_std(xs):
 
 
 def fig_engagement(rows: list[dict]) -> None:
-    """Jacobian Frobenius vs lambda_J at mu=10 and mu=50."""
-    fig, ax = plt.subplots(figsize=(6.0, 4.0))
-    for mu, color, marker in [(10.0, "C3", "o"), (50.0, "C0", "s")]:
+    """Jacobian Frobenius vs lambda_J across the mu engagement sweep."""
+    fig, ax = plt.subplots(figsize=(6.6, 4.2))
+    mus = [5.0, 10.0, 25.0, 50.0, 100.0]
+    colors = plt.cm.viridis(np.linspace(0.08, 0.92, len(mus)))
+    markers = ["o", "s", "^", "D", "v"]
+    target_lams = [0.0, 1e-2, 1e-1]
+    for mu, color, marker in zip(mus, colors, markers):
         lams_data = defaultdict(list)
         for r in rows:
             if (r["task"], r["solver"]) != ("vanderpol", "dopri5"):
                 continue
-            if r["mu"] != mu or r["K"] != 1:
+            if r["mu"] != mu or r["K"] != 1 or r["rtol"] != 1e-5:
+                continue
+            if not any(abs(r["lam"] - lam) < 1e-12 for lam in target_lams):
                 continue
             lams_data[r["lam"]].append(r["jac_frobenius_mean"])
-        lams = sorted(lams_data.keys())
+        lams = [lam for lam in target_lams if lam in lams_data]
         means = [statistics.mean(lams_data[l]) for l in lams]
         stds = [statistics.stdev(lams_data[l]) if len(lams_data[l]) > 1 else 0.0 for l in lams]
         # Plot lam=0 as a "0" point; use a tiny x value for log scale.
         xs = [(l if l > 0 else 1e-5) for l in lams]
         ax.errorbar(xs, means, yerr=stds, marker=marker, color=color, capsize=3,
-                    label=fr"$\mu={int(mu)}$ (val MSE $\approx${'' if mu==10 else ' '}{1.18 if mu==10 else 1.94:.2f})")
+                    label=fr"$\mu={int(mu)}$")
     ax.set_xscale("log")
     ax.set_xlabel(r"Regularization weight $\lambda_J$ (0 plotted at $10^{-5}$)")
     ax.set_ylabel(r"Learned $\|J_{f_\theta}\|_F$ (mean along val trajectory)")
-    ax.set_title("Jacobian regularization engagement regime (Van der Pol)")
-    ax.legend(loc="best")
+    ax.set_title("Graded Jacobian regularization engagement (Van der Pol)")
+    ax.legend(loc="best", ncols=2)
     ax.grid(True, which="both", alpha=0.3)
     fig.tight_layout()
     fig.savefig(OUT / "fig_engagement.pdf")
     plt.close(fig)
     print(f"Wrote {OUT / 'fig_engagement.pdf'}")
+
+
+def fig_engagement_decay(rows: list[dict]) -> None:
+    """Percent Jacobian drop at lambda_J=1e-1 vs mu."""
+    fig, ax = plt.subplots(figsize=(6.0, 3.8))
+    mus, drops = [], []
+    for mu in [5.0, 10.0, 25.0, 50.0, 100.0]:
+        by_lam = defaultdict(list)
+        for r in rows:
+            if (r["task"], r["solver"]) != ("vanderpol", "dopri5"):
+                continue
+            if r["mu"] != mu or r["K"] != 1 or r["rtol"] != 1e-5:
+                continue
+            if abs(r["lam"] - 0.0) < 1e-12 or abs(r["lam"] - 1e-1) < 1e-12:
+                by_lam[r["lam"]].append(r["jac_frobenius_mean"])
+        if 0.0 not in by_lam or 1e-1 not in by_lam:
+            continue
+        baseline = statistics.mean(by_lam[0.0])
+        regularized = statistics.mean(by_lam[1e-1])
+        mus.append(mu)
+        drops.append(100.0 * (baseline - regularized) / baseline)
+    ax.plot(mus, drops, marker="o", color="C3", linewidth=2)
+    ax.axhline(0.0, color="grey", linestyle="--", linewidth=1)
+    for mu, drop in zip(mus, drops):
+        ax.annotate(f"{drop:.1f}%", (mu, drop), textcoords="offset points",
+                    xytext=(0, 8 if drop >= 0 else -14), ha="center", fontsize=9)
+    ax.set_xscale("log")
+    ax.set_xticks(mus)
+    ax.set_xticklabels([str(int(mu)) for mu in mus])
+    ax.set_xlabel(r"Van der Pol stiffness parameter $\mu$")
+    ax.set_ylabel(r"Drop in learned $\|J_{f_\theta}\|_F$ at $\lambda_J=10^{-1}$")
+    ax.set_title(r"Engagement decays with target stiffness parameter $\mu$")
+    ax.grid(True, which="both", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(OUT / "fig_engagement_decay.pdf")
+    plt.close(fig)
+    print(f"Wrote {OUT / 'fig_engagement_decay.pdf'}")
 
 
 def fig_h3_slope(rows: list[dict]) -> None:
@@ -121,7 +166,7 @@ def fig_h3_slope(rows: list[dict]) -> None:
     ax.axhline(1.0, color="grey", linestyle="--", alpha=0.5, label="parity")
     ax.set_xlabel(r"Van der Pol stiffness parameter $\mu$")
     ax.set_ylabel(r"Wall-clock ratio (implicit\_adams / dopri5)")
-    ax.set_title(r"H3: Implicit advantage shrinks (ratio grows) with $\mu$")
+    ax.set_title(r"H3: Implicit Adams wall-clock penalty grows with $\mu$")
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
@@ -168,6 +213,7 @@ def main() -> None:
     rows = load_all()
     print(f"Loaded {len(rows)} runs")
     fig_engagement(rows)
+    fig_engagement_decay(rows)
     fig_h3_slope(rows)
     fig_tol_scaling(rows)
 
